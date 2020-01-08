@@ -1,0 +1,203 @@
+options(scipen = 999)
+#Install packages required ("data.table","magrittr","dplyr","tcltk") #to install >> install.packages("package name")
+library(data.table)
+library(magrittr)
+library(dplyr)
+library(tcltk)
+
+msgbox <- tkmessageBox(title = "Buffer table",message = "Hey There! Please upload Lead report", type = "ok")
+Mainsheet = data.frame(read.csv(file.choose(new = TRUE)))
+msgbox <- tkmessageBox(title = "Buffer table",message = "Please upload Opportunity report", type = "ok")
+OppReport = data.frame(read.csv(file.choose(new = TRUE)))
+Mainsheet$Lead.ID = as.character(Mainsheet$Lead.ID)
+Leadreport = Mainsheet %>% distinct(Lead.ID, .keep_all = TRUE)
+
+d = Leadreport
+
+
+d = cbind(Locale.addressing.Country = "", Countrycheck = "",  d)
+
+d$Locale.addressing.Country = ifelse(d$Reporting.Country == "GB" | d$Reporting.Country == "DK" | d$Reporting.Country ==  "IE" | d$Reporting.Country == "SE" | d$Reporting.Country ==  "FI" | d$Reporting.Country == "NO" | d$Reporting.Country == "UK" ,"UK",d$Locale.addressing.Country)
+d$Locale.addressing.Country = ifelse(d$Reporting.Country == "DE" | d$Reporting.Country == "CH" | d$Reporting.Country ==  "NL" | d$Reporting.Country == "PL" | d$Reporting.Country ==  "CZ" | d$Reporting.Country == "AT" ,"DE",d$Locale.addressing.Country)
+d$Locale.addressing.Country = ifelse(d$Reporting.Country == "ES" | d$Reporting.Country == "PT" | d$Reporting.Country == "AD" ,"ES",d$Locale.addressing.Country)
+d$Locale.addressing.Country = ifelse(d$Reporting.Country == "FR" | d$Reporting.Country == "BE" | d$Reporting.Country ==  "LU" ,"FR",d$Locale.addressing.Country)
+d$Locale.addressing.Country = ifelse(d$Reporting.Country == "IT" | d$Reporting.Country == "HU" | d$Reporting.Country == "BG" | d$Reporting.Country == "CZ" ,"IT",d$Locale.addressing.Country)
+
+#Remove all the non matches
+
+d = subset(d,d$Locale.addressing.Country != "1")
+
+
+d$Closure = ""
+
+d$Closure = ifelse((d$Locale.addressing.Country =="FR"|d$Locale.addressing.Country =="1") & d$Marketplace != "FR","Remove","Add")
+d = subset(d,d$Closure == "Add")
+d$Closure = ifelse((d$Locale.addressing.Country =="DE"|d$Locale.addressing.Country =="1") & d$Marketplace != "DE","Remove","Add")
+d = subset(d,d$Closure == "Add")
+d$Closure = ifelse((d$Locale.addressing.Country =="IT"|d$Locale.addressing.Country =="1") & d$Marketplace != "IT","Remove","Add")
+d = subset(d,d$Closure == "Add")
+d$Closure = ifelse((d$Locale.addressing.Country =="ES"|d$Locale.addressing.Country =="1") & d$Marketplace != "ES","Remove","Add")
+d = subset(d,d$Closure == "Add")
+d$Closure = ifelse((d$Locale.addressing.Country =="UK"|d$Locale.addressing.Country =="1") & d$Marketplace != "UK","Remove","Add")
+d = subset(d,d$Closure == "Add")
+
+d$Closure = gsub("Add","",d$Closure)
+
+d$Closure = ifelse(d$Locale.addressing.Country == "DE"& grepl("dawanda|DAWANDA",d$Lead.Campaign), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "DE"& grepl("ALLEGRO|allegro",d$Lead.Campaign), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "FR"& grepl("DESTOCKPLUS|Destockplus",d$Lead.Campaign), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "UK"& grepl("Contact us|CONTACT_US|Contact Us|CONTACTUS",d$Lead.Campaign), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "DE"& grepl("Contact us|CONTACT_US|Contact Us|CONTACTUS",d$Lead.Campaign), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "IT"& grepl("Contact us|CONTACT_US|Contact Us|CONTACTUS",d$Lead.Campaign), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "ES"& grepl("Contact us|CONTACT_US|Contact Us|CONTACTUS",d$Lead.Campaign), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "FR"& grepl("Contact us|CONTACT_US|Contact Us|CONTACTUS",d$Lead.Campaign), "Remove", d$Closure)
+
+d$Closure = ifelse(d$Locale.addressing.Country == "UK"  & grepl("Recall_Prospect",d$Suggested.By), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "FR" & grepl("Recall_Prospect",d$Suggested.By), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "IT" & grepl("Recall_Prospect",d$Suggested.By), "Remove", d$Closure)
+d$Closure = ifelse(d$Locale.addressing.Country == "ES" & grepl("Recall_Prospect",d$Suggested.By), "Remove", d$Closure)
+d = subset(d,d$Closure == "")
+d$Closure = ifelse(d$Email == "" & d$Phone == "","Remove",d$Closure)
+d$Closure = ifelse(d$Website == "","Remove",d$Closure)
+d = subset(d,d$Closure == "")
+d$Source = ""
+d$Source = ifelse(d$Locale.addressing.Country == "UK" & d$Record.Type == "SOA" & d$Primary.Category == "BISS", "B2B", d$Source)
+d$Source = ifelse(d$Locale.addressing.Country == "UK" & d$Record.Type == "SOA" & d$Primary.Category == "Office Products", "B2B", d$Source)
+
+d$Source = ifelse(d$Locale.addressing.Country == "DE" & d$Record.Type == "SOA" & d$Primary.Category == "BISS", "B2B", d$Source)
+d$Source = ifelse(d$Locale.addressing.Country == "DE" & d$Record.Type == "SOA" & d$Primary.Category == "Office Products", "B2B", d$Source)
+
+d$Source = ifelse(d$Locale.addressing.Country == "ES" & d$Record.Type == "SOA" & d$Primary.Category == "BISS", "LUX", d$Source)
+d$Source = ifelse(d$Locale.addressing.Country == "FR" & d$Record.Type == "SOA" & d$Primary.Category == "BISS", "LUX", d$Source)
+d$Source = ifelse(d$Locale.addressing.Country == "IT" & d$Record.Type == "SOA" & d$Primary.Category == "BISS", "LUX", d$Source)
+
+d$Source = ifelse(d$Primary.Category == "Automotive", "LUX", d$Source)
+d$Source = ifelse(d$Source == "", "B2C", d$Source)
+d$Source = ifelse(d$Record.Type == "B2B","B2B",d$Source)
+
+#Primary Category change
+d$Primary.Category = gsub("Lawn & Garden","Lawn and Garden",d$Primary.Category)
+d$Primary.Category = gsub("Personal Care Appliances","Personal_Care_Appliances",d$Primary.Category)
+d$Primary.Category = gsub("Tools","Home Improvement",d$Primary.Category)
+
+d$Localematch = NULL
+d$Closure = NULL
+
+Lead_Buffer_report = d
+
+#####Opportunity buffer report
+
+s = OppReport
+
+
+s = cbind(Localetoadd = "", s)
+
+s$Localetoadd = ifelse(s$Reporting.Country == "GB" | s$Reporting.Country == "DK" | s$Reporting.Country ==  "IE" | s$Reporting.Country == "SE" | s$Reporting.Country ==  "FI" | s$Reporting.Country == "NO" | s$Reporting.Country == "UK" ,"UK",s$Localetoadd)
+s$Localetoadd = ifelse(s$Reporting.Country == "DE" | s$Reporting.Country == "CH" | s$Reporting.Country ==  "NL" | s$Reporting.Country == "PL" | s$Reporting.Country ==  "CZ" | s$Reporting.Country == "AT" ,"DE",s$Localetoadd)
+s$Localetoadd = ifelse(s$Reporting.Country == "ES" | s$Reporting.Country == "PT" | s$Reporting.Country == "AD" ,"ES",s$Localetoadd)
+s$Localetoadd = ifelse(s$Reporting.Country == "FR" | s$Reporting.Country == "BE" | s$Reporting.Country ==  "LU" ,"FR",s$Localetoadd)
+s$Localetoadd = ifelse(s$Reporting.Country == "IT" | s$Reporting.Country == "HU" | s$Reporting.Country == "BG" | s$Reporting.Country == "CZ" ,"IT",s$Localetoadd)
+
+
+
+s$Closure = ""
+
+s$Closure = ifelse((s$Localetoadd =="FR"|s$Localetoadd =="1") & s$Marketplace != "FR","Remove","Add")
+s = subset(s,s$Closure == "Add")
+s$Closure = ifelse((s$Localetoadd =="DE"|s$Localetoadd =="1") & s$Marketplace != "DE","Remove","Add")
+s = subset(s,s$Closure == "Add")
+s$Closure = ifelse((s$Localetoadd =="IT"|s$Localetoadd =="1") & s$Marketplace != "IT","Remove","Add")
+s = subset(s,s$Closure == "Add")
+s$Closure = ifelse((s$Localetoadd =="ES"|s$Localetoadd =="1") & s$Marketplace != "ES","Remove","Add")
+s = subset(s,s$Closure == "Add")
+s$Closure = ifelse((s$Localetoadd =="UK"|s$Localetoadd =="1") & s$Marketplace != "UK","Remove","Add")
+s = subset(s,s$Closure == "Add")
+
+s$Closure <-ifelse(s$Marketplace != "" & grepl("2018",s$LQA.Review.Date),"Add",s$Closure)
+s$Closure <-ifelse(s$Marketplace != "" & grepl("2017",s$LQA.Review.Date),"Add",s$Closure)
+
+s$Closure = gsub("Add","",s$Closure)
+
+
+s$Source = ""
+
+s$Source = ifelse(s$Localetoadd == "UK" & s$Opportunity.Record.Type == "SOA" & s$Primary.Category == "BISS", "B2B", s$Source)
+s$Source = ifelse(s$Localetoadd == "UK" & s$Opportunity.Record.Type == "SOA" & s$Primary.Category == "Office Products", "B2B", s$Source)
+
+s$Source = ifelse(s$Localetoadd == "DE" & s$Opportunity.Record.Type == "SOA" & s$Primary.Category == "BISS", "B2B", s$Source)
+s$Source = ifelse(s$Localetoadd == "DE" & s$Opportunity.Record.Type == "SOA" & s$Primary.Category == "Office Products", "B2B", s$Source)
+
+s$Source = ifelse(s$Localetoadd == "ES" & s$Opportunity.Record.Type == "SOA" & s$Primary.Category == "BISS", "LUX", s$Source)
+s$Source = ifelse(s$Localetoadd == "FR" & s$Opportunity.Record.Type == "SOA" & s$Primary.Category == "BISS", "LUX", s$Source)
+s$Source = ifelse(s$Localetoadd == "IT" & s$Opportunity.Record.Type == "SOA" & s$Primary.Category == "BISS", "LUX", s$Source)
+
+s$Source = ifelse(s$Primary.Category == "Automotive", "LUX", s$Source)
+s$Source = ifelse(s$Source == "", "B2C", s$Source)
+s$Source = ifelse(s$Opportunity.Record.Type == "B2B","B2B",s$Source)
+s$Source <-ifelse(s$Marketplace != "" & grepl('HYD_B2B_PRIO',s$Lead.Source.Detail),"B2B",s$Source)
+
+Opp_Buffer_report = s
+
+####B2B report
+
+b = Leadreport
+
+b$Locale.addressing.Country = ""
+
+b$Locale.addressing.Country = ifelse(b$Reporting.Country == "GB" | b$Reporting.Country == "DK" | b$Reporting.Country ==  "IE" | b$Reporting.Country == "SE" | b$Reporting.Country ==  "FI" | b$Reporting.Country == "NO" | b$Reporting.Country == "UK" ,"UK",b$Locale.addressing.Country)
+b$Locale.addressing.Country = ifelse(b$Reporting.Country == "DE" | b$Reporting.Country == "CH" | b$Reporting.Country ==  "NL" | b$Reporting.Country == "PL" | b$Reporting.Country ==  "CZ" | b$Reporting.Country == "AT" ,"DE",b$Locale.addressing.Country)
+
+b <- subset(b,b$Locale.addressing.Country == "DE" | b$Locale.addressing.Country == "UK")
+b$new = ""
+b$new_2 = ""
+b$Closure = ""
+
+
+b$Closure = ifelse(b$Locale.addressing.Country == "DE"& grepl("dawanda|DAWANDA",b$Lead.Campaign), "Remove", b$Closure)
+b$Closure = ifelse(b$Locale.addressing.Country == "DE"& grepl("ALLEGRO|allegro",b$Lead.Campaign), "Remove", b$Closure)
+b$Closure = ifelse(b$Locale.addressing.Country == "UK"& grepl("MSRJuly17",b$Lead.Campaign), "Remove", b$Closure)
+b$Closure = ifelse(b$Locale.addressing.Country == "UK"& grepl("Contact us|CONTACT_US",b$Lead.Campaign), "Remove", b$Closure)
+
+b = subset(b,b$Closure == "")
+
+b$Closure = ifelse(b$Email == "" & b$Phone == "","Remove",b$Closure)
+b$Closure = ifelse(b$Website == "","Remove",b$Closure)
+b = subset(b,b$Closure == "")
+b$Source = ""
+b$Source = ifelse(b$Locale.addressing.Country == "UK" & b$Record.Type == "SOA" & b$Primary.Category == "BISS", "B2B", b$Source)
+b$Source = ifelse(b$Locale.addressing.Country == "UK" & b$Record.Type == "SOA" & b$Primary.Category == "Office Products", "B2B", b$Source)
+
+b$Source = ifelse(b$Locale.addressing.Country == "DE" & b$Record.Type == "SOA" & b$Primary.Category == "BISS", "B2B", b$Source)
+b$Source = ifelse(b$Locale.addressing.Country == "DE" & b$Record.Type == "SOA" & b$Primary.Category == "Office Products", "B2B", b$Source)
+
+b$Source = ifelse(b$Locale.addressing.Country == "ES" & b$Record.Type == "SOA" & b$Primary.Category == "BISS", "LUX", b$Source)
+b$Source = ifelse(b$Locale.addressing.Country == "FR" & b$Record.Type == "SOA" & b$Primary.Category == "BISS", "LUX", b$Source)
+b$Source = ifelse(b$Locale.addressing.Country == "IT" & b$Record.Type == "SOA" & b$Primary.Category == "BISS", "LUX", b$Source)
+
+b$Source = ifelse(b$Primary.Category == "Automotive", "LUX", b$Source)
+b$Source = ifelse(b$Source == "", "B2C", b$Source)
+b$Source = ifelse(b$Record.Type == "B2B","B2B",b$Source)
+
+#Primary Category change
+b$Primary.Category = gsub("Lawn & Garden","Lawn and Garden",b$Primary.Category)
+b$Primary.Category = gsub("Personal Care Appliances","Personal_Care_Appliances",b$Primary.Category)
+b$Primary.Category = gsub("Tools","Home Improvement",b$Primary.Category)
+
+b$new <- ifelse(b$Lead.Status != "" & grepl('HYD_B2B_PRIO',b$Lead.Source.Detail),"HYD_B2B_PRIO",b$new)
+b$new <- ifelse(b$new == "" & grepl('HYD_B2B_PRIO',b$Lead.Source.Detail.1),"HYD_B2B_PRIO",b$new)
+b$new <- ifelse(b$new == "","NON_HYD_B2B_PRIO",b$new)
+b$new_2 <- ifelse(b$Lead.Status != "" & grepl('Recall_Prospect',b$Suggested.By),"Recall_Prospect",b$new_2)
+
+
+b$Localematch = NULL
+b$Closure = NULL
+
+B2Bfile = b
+
+write.csv(Lead_Buffer_report, file=choose.files(caption="Save AS...",filters = c("Comma Delimited Files (.csv)","*.csv")),row.names = FALSE)
+
+write.csv(Opp_Buffer_report, file=choose.files(caption="Save AS...",filters = c("Comma Delimited Files (.csv)","*.csv")),row.names = FALSE)
+
+write.csv(B2Bfile, file=choose.files(caption="Save AS...",filters = c("Comma Delimited Files (.csv)","*.csv")),row.names = FALSE)
+
+rm(list=ls())
