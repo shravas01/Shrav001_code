@@ -1,0 +1,1089 @@
+library(data.table)
+library(magrittr)
+library(dplyr)
+
+options(scipen = 999)
+Mainsheet = data.frame(read.delim(file.choose(new = TRUE)))
+Mainsheet = cbind(de_dup_check = "",Scope = "",Mainsheet)
+dedup1 = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/Dedup_file/dedup1.csv",TRUE))
+names(dedup1)[names(dedup1) == "Customer.ID"] = "merchant_customer_id"
+dedup1 = dedup1["merchant_customer_id"]
+dedup1 = unique(dedup1)
+dedup2 = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/Dedup_file/dedup2.csv",TRUE))
+names(dedup2)[names(dedup2) == "Customer.ID"] = "merchant_customer_id"
+dedup2 = dedup2["merchant_customer_id"]
+dedup2 = unique(dedup2)
+#ETL deduplication process - (SOA de-dup 1)
+SOAUnblock = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/Dedup_file/SOAUnblock.csv",TRUE))
+names(SOAUnblock)[names(SOAUnblock) == "cid"] = "merchant_customer_id"
+SOAUnblock = SOAUnblock["merchant_customer_id"]
+SOAUnblock = unique(SOAUnblock)
+#ETL deduplication process - (SOA de-dup 2)
+SOAUnblock2 = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/Dedup_file/SOAUnblock2.csv",TRUE))
+names(SOAUnblock2)[names(SOAUnblock2) == "cid"] = "merchant_customer_id"
+SOAUnblock2 = SOAUnblock2["merchant_customer_id"]
+SOAUnblock2 = unique(SOAUnblock2)
+#Clean-up process
+ReasonSheet = Mainsheet
+ReasonSheet = cbind(Closure_comments = "", ReasonSheet)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$merch_curr_status_description == "Investigation (by fraud)", "Removed for Investigation(by fraud)", ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$fraud_status == "FraudStatus" | ReasonSheet$fraud_status == "TerminatedStatus" | ReasonSheet$fraud_status == "VCACStatus","Excluded for Fraud, Terminated and VCAC",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$eu5_preblock_gms < 4000,"Excluded for GMS < 4K", ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$locale_to_address == "CN/US","Excluded for irrelevant locale ",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$uk_enf_reason == "IW: VAT", "Excluded for IW:VAT (UK)", ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$de_enf_reason == "IW: VAT","Excluded for IW:VAT (DE)",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$fr_enf_reason == "IW: VAT","Excluded for IW:VAT (FR)",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$it_enf_reason == "IW: VAT","Excluded for IW:VAT (IT)",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$es_enf_reason == "IW: VAT","Excluded for IW:VAT (ES)",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$merchant_pg_group_description == "","Excluded as category blank",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$mfn_seller_type == "Individual SSR","Exclude seller type",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_commemts = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$mfn_seller_type != "DSR" | ReasonSheet$mfn_seller_type != "SSR","Excluded for Seller type",ReasonSheet$Closure_comments)
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$paneu_launch_date != "","Remove PAN EU leads",ReasonSheet$Closure_comments)
+ReasonSheet = cbind(Curr_date = "", ReasonSheet)
+ReasonSheet$Curr_date = paste((Sys.Date()))
+ReasonSheet$eu5_block_day = format(as.Date(ReasonSheet$eu5_block_day), "%Y/%m/%d")
+ReasonSheet$Curr_date = format(as.Date(ReasonSheet$Curr_date), "%Y/%m/%d")
+ReasonSheet$eu5_block_day <- as.Date(strptime(ReasonSheet$eu5_block_day, "%Y/%m/%d"))
+ReasonSheet$Curr_date <- as.Date(strptime(ReasonSheet$Curr_date, "%Y/%m/%d"))
+ReasonSheet$Days <- ReasonSheet$Curr_date - ReasonSheet$eu5_block_day
+ReasonSheet$Closure_comments = ifelse(ReasonSheet$Closure_comments == "1" & ReasonSheet$Days >= 365,"Excluded for date > 12m",ReasonSheet$Closure_comments)
+
+#TBAM Segregation
+TBAMPANEU = Mainsheet
+TBAMPANEU = cbind(Closure_comments = "", TBAMPANEU)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$merch_curr_status_description == "Investigation (by fraud)", "Removed for Investigation(by fraud)", TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$fraud_status == "FraudStatus" | TBAMPANEU$fraud_status == "TerminatedStatus" | TBAMPANEU$fraud_status == "VCACStatus","Excluded for Fraud, Terminated and VCAC",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$locale_to_address == "CN/US","Excluded for irrelevant locale ",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$eu5_paneu_gms_preblock_t30 < 4000,"Excluded for GMS < 4K", TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$uk_enf_reason == "IW: VAT", "Excluded for IW:VAT (UK)", TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$de_enf_reason == "IW: VAT","Excluded for IW:VAT (DE)",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$fr_enf_reason == "IW: VAT","Excluded for IW:VAT (FR)",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$it_enf_reason == "IW: VAT","Excluded for IW:VAT (IT)",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$es_enf_reason == "IW: VAT","Excluded for IW:VAT (ES)",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$merchant_pg_group_description == "","Excluded as category blank",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$mfn_seller_type == "Individual SSR","Exclude seller type",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_commemts = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$mfn_seller_type != "DSR" | TBAMPANEU$mfn_seller_type != "SSR","Excluded for Seller type",TBAMPANEU$Closure_comments)
+TBAMPANEU = cbind(Curr_date = "", TBAMPANEU)
+TBAMPANEU$Curr_date = paste((Sys.Date()))
+TBAMPANEU$eu5_block_day = format(as.Date(TBAMPANEU$eu5_block_day), "%Y/%m/%d")
+TBAMPANEU$Curr_date = format(as.Date(TBAMPANEU$Curr_date), "%Y/%m/%d")
+TBAMPANEU$eu5_block_day <- as.Date(strptime(TBAMPANEU$eu5_block_day, "%Y/%m/%d"))
+TBAMPANEU$Curr_date <- as.Date(strptime(TBAMPANEU$Curr_date, "%Y/%m/%d"))
+TBAMPANEU$Days <- TBAMPANEU$Curr_date - TBAMPANEU$eu5_block_day
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$Days >= 365,"Excluded for date > 12m",TBAMPANEU$Closure_comments)
+TBAMPANEU$Closure_comments = ifelse(TBAMPANEU$Closure_comments == "1" & TBAMPANEU$paneu_launch_date == "","Remove PAN EU leads",TBAMPANEU$Closure_comments)
+TBAMPANEU = subset(TBAMPANEU,TBAMPANEU$Closure_comments == "1")
+
+R = rbind(TBAMPANEU,ReasonSheet) #R is combining both TBAM PAN EU & ReasonSheet
+
+Duplicationcheck = R
+Duplicationcheck = subset(Duplicationcheck,Duplicationcheck$Closure_comments == "1")
+
+###Astro duplicate comments
+commentsfile = R
+
+dedup1$Duplicate<-1
+dedup2$Duplicate2<-1
+SOAUnblock$Duplicate3<-1
+SOAUnblock2$Duplicate4<-1
+
+commentsfile<- merge(R,dedup1,by=c('merchant_customer_id'),all.x=T)
+commentsfile$Closure_comments = ifelse(commentsfile$Closure_comments == "1" & commentsfile$Duplicate == "1","Astro Duplicate",commentsfile$Closure_comments)
+
+Newcommentsfile = commentsfile
+
+Newcommentsfile <- merge(commentsfile,dedup2,by=c('merchant_customer_id'),all.x=T)
+Newcommentsfile$Closure_comments = ifelse(Newcommentsfile$Closure_comments == "1" & Newcommentsfile$Duplicate2 == "1","Astro Duplicate",Newcommentsfile$Closure_comments)
+
+ETLcommentfile = Newcommentsfile
+
+ETLcommentfile <- merge(Newcommentsfile,SOAUnblock,by=c('merchant_customer_id'),all.x=T)
+ETLcommentfile$Closure_comments = ifelse(ETLcommentfile$Closure_comments == "1" & ETLcommentfile$Duplicate3 == "1","ETL duplicate", ETLcommentfile$Closure_comments)
+
+Finalcommentfile = ETLcommentfile
+
+Finalcommentfile <- merge(ETLcommentfile,SOAUnblock2,by=c('merchant_customer_id'),all.x=T)
+Finalcommentfile$Closure_comments = ifelse(Finalcommentfile$Closure_comments == "1" & Finalcommentfile$Duplicate3 == "1","ETL duplicate", Finalcommentfile$Closure_comments)
+
+#Code below is to eliminate duplicates
+
+workbook_new<- merge(Duplicationcheck,dedup1,by=c('merchant_customer_id'),all.x=T)
+workbook_new$Duplicate<-ifelse(is.na(workbook_new$Duplicate),0,workbook_new$Duplicate)
+workbook_new<-subset(workbook_new,workbook_new$Duplicate==0)
+
+workbook_new2<- merge(workbook_new,dedup2,by=c('merchant_customer_id'),all.x=T)
+workbook_new2$Duplicate2<-ifelse(is.na(workbook_new2$Duplicate2),0,workbook_new2$Duplicate2)
+workbook_new2<-subset(workbook_new2,workbook_new2$Duplicate2==0)
+
+#ETL deduplication
+
+workbook_new3<- merge(workbook_new2,SOAUnblock,by=c('merchant_customer_id'),all.x=T)
+workbook_new3$Duplicate3<-ifelse(is.na(workbook_new3$Duplicate3),0,workbook_new3$Duplicate3)
+workbook_new3<-subset(workbook_new3,workbook_new3$Duplicate3==0)
+
+workbook_new4<- merge(workbook_new3,SOAUnblock2,by=c('merchant_customer_id'),all.x=T)
+workbook_new4$Duplicate4<-ifelse(is.na(workbook_new4$Duplicate4),0,workbook_new4$Duplicate4)
+workbook_new4<-subset(workbook_new4,workbook_new4$Duplicate4==0)
+
+Workbook = workbook_new4
+
+#Scope segregation
+
+Workbook$Scope = ifelse(Workbook$eu5_fba_launch_date != "" & Workbook$eu5_fba_gms_t30 <= "0", "ESM2",Workbook$Scope)
+Workbook$Scope = ifelse(Workbook$eu5_fba_launch_date != "" & grepl("-",Workbook$eu5_fba_gms_t30), "ESM2",Workbook$Scope)
+Workbook$Scope = ifelse(Workbook$paneu_launch_date != "", "TBAM PAN EU",Workbook$Scope)
+Workbook$Scope = ifelse(Workbook$Scope == "1", "ESM1",Workbook$Scope)
+
+#Locale and PF match
+
+w = Workbook
+w = cbind(Locale = "", PF = "",w)
+w$Locale = ifelse(w$merchant_pg_group_description == "Automotive" | w$merchant_pg_group_description == "Biss" | w$merchant_pg_group_description == "BISS","LUX",w$Locale)
+w$Locale = ifelse(w$Locale == "1", paste(w$locale_to_address),w$Locale)
+
+w$merchant_pg_group_description = gsub("Lawn & Garden","Lawn and Garden",w$merchant_pg_group_description)
+w$merchant_pg_group_description = gsub("Personal Care Appliances","Personal_Care_Appliances",w$merchant_pg_group_description)
+
+
+
+#ES
+
+w$PF = ifelse(w$Locale == "ES" & grepl("Apparel|Shoes|Luggage|Watches|Jewelry",w$merchant_pg_group_description),"SL",w$PF)
+w$PF = ifelse(w$Locale == "ES" & grepl("Home Improvement|Lawn and Garden|Sports|Home|Furniture|Kitchen|Toys",w$merchant_pg_group_description),"OHL",w$PF)
+w$PF = ifelse(w$Locale == "ES" & grepl("PC|Wireless|Electronics|Camera|Home Entertainment|Office Products|Musical Instruments",w$merchant_pg_group_description),"HL1",w$PF)
+w$PF = ifelse(w$Locale == "ES" & grepl("Beauty|Health & Personal Care|Personal_Care_Appliances|Pet Products|Baby|Wine|Grocery",w$merchant_pg_group_description),"CONS",w$PF)
+
+#FR
+
+w$PF = ifelse(w$Locale == "FR" & grepl("Beauty|Health & Personal Care|Personal_Care_Appliances|Pet Products|Baby|Wine|Grocery",w$merchant_pg_group_description),"CONS",w$PF)
+w$PF = ifelse(w$Locale == "FR" & grepl("Apparel|Shoes|Luggage|Watches|Jewelry",w$merchant_pg_group_description),"SL",w$PF)
+w$PF = ifelse(w$Locale == "FR" & grepl("Home Improvement|Lawn and Garden|Sports|Home|Furniture|Kitchen|Toys|Major Appliances",w$merchant_pg_group_description),"HL2",w$PF)
+w$PF = ifelse(w$Locale == "FR" & grepl("PC|Wireless|Electronics|Camera|Home Entertainment|Office Products|Musical Instruments",w$merchant_pg_group_description),"HL1",w$PF)
+
+#UK
+
+w$PF = ifelse(w$Locale == "UK" & grepl("Beauty|Health & Personal Care|Personal_Care_Appliances|Pet Products|Baby|Wine|Grocery",w$merchant_pg_group_description),"CONS",w$PF)
+w$PF = ifelse(w$Locale == "UK" & grepl("PC|Wireless|Electronics|Camera|Home Entertainment|Office Products|Musical Instruments|Home Improvement|Lawn and Garden|Sports|Home|Furniture|Kitchen|Toys|Major Appliances",w$merchant_pg_group_description),"HL1",w$PF)
+w$PF = ifelse(w$Locale == "UK" & grepl("Apparel|Shoes|Luggage|Watches|Jewelry",w$merchant_pg_group_description),"SL",w$PF)
+
+#IT
+
+w$PF = ifelse(w$Locale == "IT" & grepl("Beauty|Health & Personal Care|Personal_Care_Appliances|Pet Products|Baby|Grocery",w$merchant_pg_group_description),"CONS",w$PF)
+w$PF = ifelse(w$Locale == "IT" & grepl("Home Improvement|Lawn and Garden|Sports|Home|Furniture|Kitchen|Toys|Major Appliances",w$merchant_pg_group_description),"OHL",w$PF)
+w$PF = ifelse(w$Locale == "IT" & grepl("Apparel|Shoes|Luggage|Watches|Jewelry",w$merchant_pg_group_description),"SL",w$PF)
+w$PF = ifelse(w$Locale == "IT" & grepl("PC|Wireless|Electronics|Camera|Home Entertainment|Office Products|Musical Instruments|Software|Video Games",w$merchant_pg_group_description),"CE",w$PF)
+
+#DE
+
+w$PF = ifelse(w$Locale == "DE" & grepl("Apparel|Shoes|Luggage|Watches|Jewelry",w$merchant_pg_group_description),"SL",w$PF)
+w$PF = ifelse(w$Locale == "DE" & grepl("Beauty|Health & Personal Care|Personal_Care_Appliances|Pet Products|Baby|Wine|Grocery",w$merchant_pg_group_description),"CONS",w$PF)
+w$PF = ifelse(w$Locale == "DE" & grepl("Home Improvement|Lawn and Garden|Sports",w$merchant_pg_group_description),"HL3",w$PF)
+w$PF = ifelse(w$Locale == "DE" & grepl("PC|Wireless|Electronics|Camera|Office Products|Musical Instruments",w$merchant_pg_group_description),"HL1",w$PF)
+w$PF = ifelse(w$Locale == "DE" & grepl("Home|Furniture|Kitchen|Toys|Major Appliances",w$merchant_pg_group_description),"HL2",w$PF)
+
+#LUX
+
+w$PF = ifelse(w$Locale == "LUX" & grepl("Automotive|BISS|Biss",w$merchant_pg_group_description),"HL1",w$PF)
+
+#Block Formulas
+
+
+
+w$uk_preblock_gms_30d = round(w$uk_preblock_gms_30d)
+w = cbind(UK_Marketplace = "", UK_Block_gms = "", UK_Lead_source_detail = "", w)
+w = cbind(DE_Marketplace = "", DE_Block_gms = "", DE_Lead_source_detail = "", w)
+w = cbind(FR_Marketplace = "", FR_Block_gms = "", FR_Lead_source_detail = "", w)
+w = cbind(IT_Marketplace = "", IT_Block_gms = "", IT_Lead_source_detail = "", w)
+w = cbind(ES_Marketplace = "", ES_Block_gms = "", ES_Lead_source_detail = "", w)
+
+w$UK_Marketplace = ifelse(w$uk_block_day != "", "UK",w$UK_Marketplace)
+w$UK_Block_gms = ifelse(w$uk_block_day != "", paste(w$uk_preblock_gms_30d),w$UK_Block_gms)
+w$UK_Lead_source_detail = ifelse(w$uk_block_day !="", paste(w$uk_block_type), w$UK_Lead_source_detail)
+w$UK_Lead_source_detail = ifelse(w$UK_Marketplace == "UK" & w$UK_Lead_source_detail == "", "#NAM_To_Backfill",w$UK_Lead_source_detail)
+
+w$de_preblock_gms_30d = round(w$de_preblock_gms_30d)
+w$DE_Marketplace = ifelse(w$de_block_day != "", "DE",w$DE_Marketplace)
+w$DE_Block_gms = ifelse(w$de_block_day != "", paste(w$de_preblock_gms_30d),w$DE_Block_gms)
+w$DE_Lead_source_detail = ifelse(w$de_block_day !="", paste(w$de_block_type), w$DE_Lead_source_detail)
+w$DE_Lead_source_detail = ifelse(w$DE_Marketplace == "DE" & w$DE_Lead_source_detail == "", "#NAM_To_Backfill",w$DE_Lead_source_detail)
+
+w$it_preblock_gms_30d = round(w$it_preblock_gms_30d)
+w$IT_Marketplace = ifelse(w$it_block_day != "", "IT",w$IT_Marketplace)
+w$IT_Block_gms = ifelse(w$it_block_day != "", paste(w$it_preblock_gms_30d),w$IT_Block_gms)
+w$IT_Lead_source_detail = ifelse(w$it_block_day !="", paste(w$it_block_type), w$IT_Lead_source_detail)
+w$IT_Lead_source_detail = ifelse(w$IT_Marketplace == "IT" & w$IT_Lead_source_detail == "", "#NAM_To_Backfill",w$IT_Lead_source_detail)
+
+
+w$es_preblock_gms_30d = round(w$es_preblock_gms_30d)
+w$ES_Marketplace = ifelse(w$es_block_day != "", "ES",w$ES_Marketplace)
+w$ES_Block_gms = ifelse(w$es_block_day != "", paste(w$es_preblock_gms_30d),w$ES_Block_gms)
+w$ES_Lead_source_detail = ifelse(w$es_block_day !="", paste(w$es_block_type), w$ES_Lead_source_detail)
+w$ES_Lead_source_detail = ifelse(w$ES_Marketplace == "ES" & w$ES_Lead_source_detail == "", "#NAM_To_Backfill",w$ES_Lead_source_detail)
+
+w$fr_preblock_gms_30d = round(w$fr_preblock_gms_30d)
+w$FR_Marketplace = ifelse(w$fr_block_day != "", "FR",w$FR_Marketplace)
+w$FR_Block_gms = ifelse(w$fr_block_day != "", paste(w$fr_preblock_gms_30d),w$FR_Block_gms)
+w$FR_Lead_source_detail = ifelse(w$fr_block_day !="", paste(w$fr_block_type), w$FR_Lead_source_detail)
+w$FR_Lead_source_detail = ifelse(w$FR_Marketplace == "FR" & w$FR_Lead_source_detail == "", "#NAM_To_Backfill",w$FR_Lead_source_detail)
+
+w$ES_Lead_source_detail = gsub("GRIFFIN","#GRIFFIN_HYD",w$ES_Lead_source_detail)
+w$FR_Lead_source_detail = gsub("GRIFFIN","#GRIFFIN_HYD",w$FR_Lead_source_detail)
+w$UK_Lead_source_detail = gsub("GRIFFIN","#GRIFFIN_HYD",w$UK_Lead_source_detail)
+w$DE_Lead_source_detail = gsub("GRIFFIN","#GRIFFIN_HYD",w$DE_Lead_source_detail)
+w$IT_Lead_source_detail = gsub("GRIFFIN","#GRIFFIN_HYD",w$IT_Lead_source_detail)
+
+w$ES_Lead_source_detail = gsub("PHOENIX","#PHOENIX_HYD",w$ES_Lead_source_detail)
+w$FR_Lead_source_detail = gsub("PHOENIX","#PHOENIX_HYD",w$FR_Lead_source_detail)
+w$UK_Lead_source_detail = gsub("PHOENIX","#PHOENIX_HYD",w$UK_Lead_source_detail)
+w$DE_Lead_source_detail = gsub("PHOENIX","#PHOENIX_HYD",w$DE_Lead_source_detail)
+w$IT_Lead_source_detail = gsub("PHOENIX","#PHOENIX_HYD",w$IT_Lead_source_detail)
+
+w$ES_Lead_source_detail = gsub("EMU","#EMU_HYD",w$ES_Lead_source_detail)
+w$FR_Lead_source_detail = gsub("EMU","#EMU_HYD",w$FR_Lead_source_detail)
+w$UK_Lead_source_detail = gsub("EMU","#EMU_HYD",w$UK_Lead_source_detail)
+w$DE_Lead_source_detail = gsub("EMU","#EMU_HYD",w$DE_Lead_source_detail)
+w$IT_Lead_source_detail = gsub("EMU","#EMU_HYD",w$IT_Lead_source_detail)
+
+#UK-Priority(Process Update)
+
+w$UKPrio = ""
+w$UKPrio <-  ifelse(w$ES_Lead_source_detail == "#PHOENIX_HYD", "#PHOENIX_HYD",w$UKPrio)
+w$UKPrio <-  ifelse(w$IT_Lead_source_detail == "#PHOENIX_HYD", "#PHOENIX_HYD",w$UKPrio)
+w$UKPrio <-  ifelse(w$UK_Lead_source_detail == "#PHOENIX_HYD", "#PHOENIX_HYD",w$UKPrio)
+w$UKPrio <-  ifelse(w$DE_Lead_source_detail == "#PHOENIX_HYD", "#PHOENIX_HYD",w$UKPrio)
+w$UKPrio <-  ifelse(w$FR_Lead_source_detail == "#PHOENIX_HYD", "#PHOENIX_HYD",w$UKPrio)
+
+#LUX-locale modification
+
+w$Locale <-  ifelse(w$Locale == "LUX" & w$locale_to_address == "IT","IT-LUX",w$Locale)
+w$Locale <-  ifelse(w$Locale == "LUX" & w$locale_to_address == "UK","UK-LUX",w$Locale)
+w$Locale <-  ifelse(w$Locale == "LUX" & w$locale_to_address == "DE","DE-LUX",w$Locale)
+w$Locale <-  ifelse(w$Locale == "LUX" & w$locale_to_address == "FR","FR-LUX",w$Locale)
+w$Locale <-  ifelse(w$Locale == "LUX" & w$locale_to_address == "ES","ES-LUX",w$Locale)
+
+w$combine = paste(w$Locale,w$Scope,w$PF, sep = "_")
+
+
+FR_report = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/SOA_Open_spot_reports/FR_report.csv",TRUE))
+LUX_report = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/SOA_Open_spot_reports/LUX_report.csv",TRUE))
+ES_report = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/SOA_Open_spot_reports/ES_report.csv",TRUE))
+IT_report = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/SOA_Open_spot_reports/IT_report.csv",TRUE))
+DE_report = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/SOA_Open_spot_reports/DE_report.csv",TRUE))
+LUX_report = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/SOA_Open_spot_reports/LUX_report.csv",TRUE))
+UK_report = data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/SOA_Open_spot_reports/UK_report.csv",TRUE))
+
+NAMcheck = (data.frame(read.csv("//ant/dept-as/HYD11/GroupData/hyd-listing-integration/Existing Seller Management/Block_assignment/NAMcheck.csv",TRUE)))
+
+IT_report$Opportunity.Owner..Full.Name <- as.character(IT_report$Opportunity.Owner..Full.Name)
+
+IT_report$Opportunity.Owner..Full.Name = ifelse(IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Video Games" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Electronics" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Camera" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Office Products" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Musical Instruments" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Home Entertainment" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Software" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "PC" | IT_report$Opportunity.Owner..Full.Name == "Bianca Magnetti" & IT_report$Primary.Category == "Wireless","Bianca",IT_report$Opportunity.Owner..Full.Name)
+
+IT_report$Opportunity.Owner..Full.Name = ifelse(IT_report$Opportunity.Owner..Full.Name == "Selene Cecchinel" & IT_report$Primary.Category == "Apparel" | IT_report$Opportunity.Owner..Full.Name == "Selene Cecchinel" & IT_report$Primary.Category == "Jewelry" | IT_report$Opportunity.Owner..Full.Name == "Selene Cecchinel" & IT_report$Primary.Category == "Luggage" | IT_report$Opportunity.Owner..Full.Name == "Selene Cecchinel" & IT_report$Primary.Category == "Watch" | IT_report$Opportunity.Owner..Full.Name == "Selene Cecchinel" & IT_report$Primary.Category == "Shoes","Selene",IT_report$Opportunity.Owner..Full.Name)
+
+IT_report$Opportunity.Owner..Full.Name = ifelse(IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Video Games" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Electronics" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Camera" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Office Products" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Musical Instruments" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Home Entertainment" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Software" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "PC" | IT_report$Opportunity.Owner..Full.Name == "Luca D'Ermes" & IT_report$Primary.Category == "Wireless","Luca",IT_report$Opportunity.Owner..Full.Name)
+
+IT_report$Opportunity.Owner..Full.Name = ifelse(IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Video Games" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Electronics" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Camera" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Office Products" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Musical Instruments" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Home Entertainment" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Software" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "PC" | IT_report$Opportunity.Owner..Full.Name == "Eleonora Cometta" & IT_report$Primary.Category == "Wireless","Eleonora",IT_report$Opportunity.Owner..Full.Name)
+
+IT_report$Opportunity.Owner..Full.Name = ifelse(IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Video Games" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Electronics" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Camera" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Office Products" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Musical Instruments" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Home Entertainment" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Software" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "PC" | IT_report$Opportunity.Owner..Full.Name == "Cristina Colombo" & IT_report$Primary.Category == "Wireless","Cristina",IT_report$Opportunity.Owner..Full.Name)
+
+IT_report$Opportunity.Owner..Full.Name = ifelse(IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Video Games" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Electronics" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Camera" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Office Products" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Musical Instruments" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Home Entertainment" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Software" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "PC" | IT_report$Opportunity.Owner..Full.Name == "Edoardo Manca" & IT_report$Primary.Category == "Wireless","Edoardo",IT_report$Opportunity.Owner..Full.Name)
+
+FR_report = FR_report %>% select(Customer.ID , Opportunity.Owner..Full.Name , Suggested.By) %>% distinct() #To get unique CID
+LUX_report = LUX_report %>% select(Customer.ID , Opportunity.Owner..Full.Name , Suggested.By) %>% distinct() #To get unique CID
+ES_report = ES_report %>% select(Customer.ID , Opportunity.Owner..Full.Name , Suggested.By) %>% distinct() #To get unique CID
+IT_report = IT_report %>% select(Customer.ID , Opportunity.Owner..Full.Name , Suggested.By) %>% distinct() #To get unique CID
+DE_report = DE_report %>% select(Customer.ID , Opportunity.Owner..Full.Name , Suggested.By) %>% distinct() #To get unique CID
+LUX_report = LUX_report %>% select(Customer.ID , Opportunity.Owner..Full.Name , Suggested.By) %>% distinct()#To get unique CID
+UK_report = UK_report %>% select(Customer.ID , Opportunity.Owner..Full.Name , Suggested.By) %>% distinct() #To get unique CID
+
+Collatedreport = rbindlist(list(FR_report,LUX_report,ES_report,DE_report,IT_report,UK_report), fill = TRUE)
+names(Collatedreport)[names(Collatedreport) == "Opportunity.Owner..Full.Name"] = "NAM"
+
+Masterreport <- merge(Collatedreport,NAMcheck[,c("NAM_Scope","NAM")], by.x = "NAM", by.y = "NAM")
+
+
+dummypivot = Masterreport %>% select(NAM , NAM_Scope) %>% group_by(NAM , NAM_Scope) %>% summarise(In_pipe = length(NAM))
+
+Thresholdcheck = dummypivot
+
+Thresholdcheck= merge(dummypivot,NAMcheck[,c("Threshold","NAM")], by.x = "NAM" , by.y = "NAM")
+
+
+Thresholdcheck$diff = ""
+Thresholdcheck$diff = Thresholdcheck$Threshold - Thresholdcheck$In_pipe
+
+Thresholdcheck<-subset(Thresholdcheck, Thresholdcheck$In_pipe < Thresholdcheck$Threshold)
+
+Thresholdcheck <- unique(Thresholdcheck)
+
+Thresholdcheck$NAM <- as.character(Thresholdcheck$NAM)
+
+Thresholdcheck1 <- Thresholdcheck
+Thresholdcheck1 <- subset(Thresholdcheck1, Thresholdcheck1$NAM_Scope == "ESM1")
+Thresholdcheck2 <- Thresholdcheck
+Thresholdcheck2 <- subset(Thresholdcheck2, Thresholdcheck2$NAM_Scope == "ESM2")
+Thresholdcheck3 <- Thresholdcheck
+Thresholdcheck3 <- subset(Thresholdcheck3, Thresholdcheck3$NAM_Scope == "TBAM PAN EU")
+
+NAM<- c()
+
+for(i in 1:nrow(Thresholdcheck1)) {
+  tmp1 <- rep(Thresholdcheck1$NAM[i],Thresholdcheck1$diff[i])
+  NAM <- c(NAM,tmp1)
+}
+
+y <- c()
+
+for(i in 1:nrow(Thresholdcheck1)) {
+  tmp1 <- seq(1:Thresholdcheck1$diff[i])
+  y <- c(y,tmp1)
+}
+
+ESM1NAM <- cbind(as.data.frame(NAM),as.data.frame(y))
+ESM1NAM$Scope <- "ESM1"
+ESM1NAM<- merge(ESM1NAM,NAMcheck [,c("NAM_PF","NAM","Locale")],by=c("NAM"),all.x=T)
+ESM1NAM$concat <- paste(ESM1NAM$Locale,ESM1NAM$Scope,ESM1NAM$NAM_PF, sep = "_")
+ESM1NAM <- ESM1NAM[order(ESM1NAM$y),]
+
+rm(NAM,y,tmp1)
+
+NAM<- c()
+
+for(i in 1:nrow(Thresholdcheck2)) {
+  tmp1 <- rep(Thresholdcheck2$NAM[i],Thresholdcheck2$diff[i])
+  NAM <- c(NAM,tmp1)
+}
+
+y <- c()
+
+for(i in 1:nrow(Thresholdcheck2)) {
+  tmp1 <- seq(1:Thresholdcheck2$diff[i])
+  y <- c(y,tmp1)
+}
+
+ESM2NAM <- cbind(as.data.frame(NAM),as.data.frame(y))
+ESM2NAM$Scope <- "ESM2"
+ESM2NAM<- merge(ESM2NAM,NAMcheck [,c("NAM_PF","NAM","Locale")],by=c("NAM"),all.x=T)
+ESM2NAM$concat <- paste(ESM2NAM$Locale,ESM2NAM$Scope,ESM2NAM$NAM_PF, sep = "_")
+ESM2NAM <- ESM2NAM[order(ESM2NAM$y),]
+
+
+rm(NAM,y,tmp1)
+
+NAM<- c()
+
+for(i in 1:nrow(Thresholdcheck3)) {
+  tmp1 <- rep(Thresholdcheck3$NAM[i],Thresholdcheck3$diff[i])
+  NAM <- c(NAM,tmp1)
+}
+
+y <- c()
+
+for(i in 1:nrow(Thresholdcheck3)) {
+  tmp1 <- seq(1:Thresholdcheck3$diff[i])
+  y <- c(y,tmp1)
+}
+TBAMNAM <- cbind(as.data.frame(NAM),as.data.frame(y))
+TBAMNAM$Scope <- "TBAM PAN EU"
+TBAMNAM<- merge(TBAMNAM,NAMcheck [,c("NAM_PF","NAM","Locale")],by=c("NAM"),all.x=T)
+TBAMNAM <- TBAMNAM[order(TBAMNAM$y),]
+TBAMNAM$concat <- paste(TBAMNAM$Locale,TBAMNAM$Scope,TBAMNAM$NAM_PF, sep = "_")
+
+
+#FR ASSIGNMENT
+
+wFRESM1 = filter(w, combine == 'FR_ESM1_SL')
+wFRESM1 = wFRESM1[order(wFRESM1$eu5_preblock_gms, decreasing = T),]
+ESM1FRSL = filter(ESM1NAM, concat == 'FR_ESM1_SL')
+ESM1FRSL <- ESM1FRSL[order(ESM1FRSL$y),]
+wFRESM1 <- wFRESM1[1:nrow(ESM1FRSL),]
+FRSL1 <- merge(data.frame(wFRESM1, row.names = NULL), data.frame(ESM1FRSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+wFRESM1.1 = filter(w, combine == "FR_ESM1_CONS")
+wFRESM1.1 = wFRESM1.1[order(wFRESM1.1$eu5_preblock_gms, decreasing = T),]
+ESM1FRCON = filter(ESM1NAM, concat == "FR_ESM1_CONS")
+ESM1FRCON <- ESM1FRCON[order(ESM1FRCON$y),]
+wFRESM1.1 <- wFRESM1.1[1:nrow(ESM1FRCON),]
+FRCON <- merge(data.frame(wFRESM1.1, row.names = NULL), data.frame(ESM1FRCON, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+wFRESM1.2 = filter(w, combine == "FR_ESM1_HL1")
+wFRESM1.2 = wFRESM1.2[order(wFRESM1.2$eu5_preblock_gms, decreasing = T),]
+ESM1FRHL1 = filter(ESM1NAM, concat == "FR_ESM1_HL1")
+ESM1FRHL1 <- ESM1FRHL1[order(ESM1FRHL1$y),]
+wFRESM1.2 <- wFRESM1.2[1:nrow(ESM1FRHL1),]
+FRHL1 <- merge(data.frame(wFRESM1.2, row.names = NULL), data.frame(ESM1FRHL1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+wFRESM1.3 = filter(w, combine == "FR_ESM1_HL2")
+wFRESM1.3 = wFRESM1.3[order(wFRESM1.3$eu5_preblock_gms, decreasing = T),]
+ESM1FRHL2 = filter(ESM1NAM, concat == "FR_ESM1_HL2")
+ESM1FRHL2 <- ESM1FRHL2[order(ESM1FRHL2$y),]
+wFRESM1.3 <- wFRESM1.3[1:nrow(ESM1FRHL2),]
+FRHL2 <- merge(data.frame(wFRESM1.3, row.names = NULL), data.frame(ESM1FRHL2, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+wFRESM2 = filter(w, combine=='FR_ESM2_CONS' | combine == 'FR_ESM2_HL2' | combine == 'FR_ESM2_SL' | combine == 'FR_ESM2_HL1')
+wFRESM2 = wFRESM2[order(wFRESM2$eu5_preblock_gms, decreasing = T),]
+ESM2FRALL = filter(ESM2NAM, concat=='FR_ESM2_All')
+ESM2FRALL  <- ESM2FRALL[order(ESM2FRALL$y),]
+wFRESM2 <- wFRESM2[1:nrow(ESM2FRALL),]
+FRESM2ALL <- merge(data.frame(wFRESM2, row.names = NULL), data.frame(ESM2FRALL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+wFRTBAM = filter(w, combine == 'FR_TBAM PAN EU_CONS' | combine == 'FR_TBAM PAN EU_HL2' | combine == 'FR_TBAM PAN EU_SL' | combine == 'FR_TBAM PAN EU_HL1')
+wFRTBAM = wFRTBAM[order(wFRTBAM$eu5_paneu_gms_preblock_t30, decreasing = T),]
+TBAMFRALL = filter(TBAMNAM, concat=="FR_TBAM PAN EU_All")
+TBAMFRALL  <- TBAMFRALL[order(TBAMFRALL$y),]
+wFRTBAM <- wFRTBAM[1:nrow(TBAMFRALL),]
+FRTBAMALL <- merge(data.frame(wFRTBAM, row.names = NULL), data.frame(TBAMFRALL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+#ES ASSIGNMENT
+
+wESESM1 = filter(w,combine =='ES_ESM1_SL')
+wESESM1 = wESESM1[order(wESESM1$eu5_preblock_gms, decreasing = T),]
+ESM1ESSL = filter(ESM1NAM, concat == "ES_ESM1_SL")
+ESM1ESSL <- ESM1ESSL[order(ESM1ESSL$y),]
+wESESM1 <- wESESM1[1:nrow(ESM1ESSL),]
+ESSL1 <- merge(data.frame(wESESM1, row.names = NULL), data.frame(ESM1ESSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+
+ESM1ESOHL = filter(ESM1NAM, concat == "ES_ESM1_OHL")
+ESM1ESOHL <- ESM1ESOHL[order(ESM1ESOHL$y),]
+wESESM1 <- wESESM1[1:nrow(ESM1ESOHL),]
+ESOHL <- merge(data.frame(wESESM1, row.names = NULL), data.frame(ESM1ESOHL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+ESM1ESCONS = filter(ESM1NAM, concat == "ES_ESM1_CONS")
+ESM1ESCONS <- ESM1ESCONS[order(ESM1ESCONS$y),]
+wESESM1 <- wESESM1[1:nrow(ESM1ESCONS),]
+ESCONS <- merge(data.frame(wESESM1, row.names = NULL), data.frame(ESM1ESCONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+ESM1ESHL = filter(ESM1NAM, concat == "ES_ESM1_HL1")
+ESM1ESHL <- ESM1ESHL[order(ESM1ESHL$y),]
+wESESM1 <- wESESM1[1:nrow(ESM1ESHL),]
+ESHL <- merge(data.frame(wESESM1, row.names = NULL), data.frame(ESM1ESHL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+###ESESM2###
+
+wESESM2 = filter(w, combine =='ES_ESM2_CONS' | combine == 'ES_ESM2_OHL' | combine =='ES_ESM2_SL' | combine == 'ES_ESM2_HL1')
+wESESM2 = wESESM2[order(wESESM2$eu5_preblock_gms, decreasing = T),]
+ESM2ESALL = filter(ESM2NAM, concat=='ES_ESM2_ALL')
+ESM2ESALL  <- ESM2ESALL[order(ESM2ESALL$y),]
+wESESM2 <- wESESM2[1:nrow(ESM2ESALL),]
+ESESM2ALL <- merge(data.frame(wESESM2, row.names = NULL), data.frame(ESM2ESALL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+###ES TBAM PAN EU###
+
+wESTBAM = filter(w, combine =='ES_TBAM PAN EU_CONS' | combine == 'ES_TBAM PAN EU_OHL' | combine =='ES_TBAM PAN EU_SL' | combine == 'ES_TBAM PAN EU_HL1')
+wESTBAM = wESTBAM[order(wESTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMESALL = filter(TBAMNAM, concat=='ES_TBAM PAN EU_ALL')
+TBAMESALL  <- TBAMESALL[order(TBAMESALL$y),]
+wESTBAM <- wESTBAM[1:nrow(TBAMESALL),]
+ESTBAM <- merge(data.frame(wESTBAM, row.names = NULL), data.frame(TBAMESALL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+###LUX##
+
+wLUX = filter(w, combine == 'IT-LUX_ESM1_HL1')
+wLUX = wLUX[order(wLUX$eu5_preblock_gms, decreasing = T),]
+ITLUXESM1 = filter(ESM1NAM, concat == "IT-LUX_ESM1_HL1")
+ITLUXESM1 <- ITLUXESM1[order(ITLUXESM1$y),]
+wLUX <- wLUX[1:nrow(ITLUXESM1),]
+ITLUX <- merge(data.frame(wLUX, row.names = NULL), data.frame(ITLUXESM1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wLUX = filter(w, combine == 'DE-LUX_ESM1_HL1')
+wLUX = wLUX[order(wLUX$eu5_preblock_gms, decreasing = T),]
+DELUXESM1 = filter(ESM1NAM, concat == "DE-LUX_ESM1_HL1")
+DELUXESM1 <- DELUXESM1[order(DELUXESM1$y),]
+wLUX <- wLUX[1:nrow(DELUXESM1),]
+DELUX <- merge(data.frame(wLUX, row.names = NULL), data.frame(DELUXESM1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wLUX = filter(w, combine == 'UK-LUX_ESM1_HL1')
+wLUX = wLUX[order(wLUX$eu5_preblock_gms, decreasing = T),]
+UKLUXESM1 = filter(ESM1NAM, concat == "UK-LUX_ESM1_HL1")
+UKLUXESM1 <- UKLUXESM1[order(UKLUXESM1$y),]
+wLUX <- wLUX[1:nrow(UKLUXESM1),]
+UKLUX <- merge(data.frame(wLUX, row.names = NULL), data.frame(UKLUXESM1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wLUX = filter(w, combine == 'FR-LUX_ESM1_HL1')
+wLUX = wLUX[order(wLUX$eu5_preblock_gms, decreasing = T),]
+FRLUXESM1 = filter(ESM1NAM, concat == "FR-LUX_ESM1_HL1")
+FRLUXESM1 <- FRLUXESM1[order(FRLUXESM1$y),]
+wLUX <- wLUX[1:nrow(FRLUXESM1),]
+FRLUX <- merge(data.frame(wLUX, row.names = NULL), data.frame(FRLUXESM1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wLUX = filter(w, combine == 'ES-LUX_ESM1_HL1')
+wLUX = wLUX[order(wLUX$eu5_preblock_gms, decreasing = T),]
+ESLUXESM1 = filter(ESM1NAM, concat == "ES-LUX_ESM1_HL1")
+ESLUXESM1 <- ESLUXESM1[order(ESLUXESM1$y),]
+wLUX <- wLUX[1:nrow(ESLUXESM1),]
+ESLUX <- merge(data.frame(wLUX, row.names = NULL), data.frame(ESLUXESM1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+###DE###
+
+wDEESM1 = filter(w, combine == "DE_ESM1_SL")
+wDEESM1 = wDEESM1[order(wDEESM1$eu5_preblock_gms, decreasing = T),]
+ESM1DESL = filter(ESM1NAM, concat == "DE_ESM1_SL")
+ESM1DESL <- ESM1DESL[order(ESM1DESL$y),]
+wDEESM1 <- wDEESM1[1:nrow(ESM1DESL),]
+DESL1 <- merge(data.frame(wDEESM1, row.names = NULL), data.frame(ESM1DESL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM1 = filter(w, combine == "DE_ESM1_CONS")
+wDEESM1 = wDEESM1[order(wDEESM1$eu5_preblock_gms, decreasing = T),]
+ESM1DECONS = filter(ESM1NAM, concat == "DE_ESM1_CONS")
+ESM1DECONS <- ESM1DECONS[order(ESM1DECONS$y),]
+wDEESM1 <- wDEESM1[1:nrow(ESM1DECONS),]
+DECONS <- merge(data.frame(wDEESM1, row.names = NULL), data.frame(ESM1DECONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM1 = filter(w, combine == "DE_ESM1_HL1")
+wDEESM1 = wDEESM1[order(wDEESM1$eu5_preblock_gms, decreasing = T),]
+ESM1DEHL1 = filter(ESM1NAM, concat == "DE_ESM1_HL1")
+ESM1DEHL1 <- ESM1DEHL1[order(ESM1DEHL1$y),]
+wDEESM1 <- wDEESM1[1:nrow(ESM1DEHL1),]
+DEHL1 <- merge(data.frame(wDEESM1, row.names = NULL), data.frame(ESM1DEHL1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM1 = filter(w, combine == "DE_ESM1_HL2")
+wDEESM1 = wDEESM1[order(wDEESM1$eu5_preblock_gms, decreasing = T),]
+ESM1DEHL2 = filter(ESM1NAM, concat == "DE_ESM1_HL2")
+ESM1DEHL2 <- ESM1DEHL2[order(ESM1DEHL2$y),]
+wDEESM1 <- wDEESM1[1:nrow(ESM1DEHL2),]
+DEHL2 <- merge(data.frame(wDEESM1, row.names = NULL), data.frame(ESM1DEHL2, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM1 = filter(w, combine == "DE_ESM1_HL3")
+wDEESM1 = wDEESM1[order(wDEESM1$eu5_preblock_gms, decreasing = T),]
+ESM1DEHL3 = filter(ESM1NAM, concat == "DE_ESM1_HL3")
+ESM1DEHL3 <- ESM1DEHL3[order(ESM1DEHL3$y),]
+wDEESM1 <- wDEESM1[1:nrow(ESM1DEHL3),]
+DEHL3 <- merge(data.frame(wDEESM1, row.names = NULL), data.frame(ESM1DEHL3, row.names = NULL), by = 0, all = TRUE)[-1]
+
+##DEESM2##
+
+wDEESM2 = filter(w, combine == "DE_ESM2_SL")
+wDEESM2 = wDEESM2[order(wDEESM2$eu5_preblock_gms, decreasing = T),]
+ESM2DESL = filter(ESM2NAM, concat == "DE_ESM2_SL")
+ESM2DESL <- ESM2DESL[order(ESM2DESL$y),]
+wDEESM2 <- wDEESM2[1:nrow(ESM2DESL),]
+ESM2DESL1 <- merge(data.frame(wDEESM2, row.names = NULL), data.frame(ESM2DESL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM2 = filter(w, combine == "DE_ESM2_CONS")
+wDEESM2 = wDEESM2[order(wDEESM2$eu5_preblock_gms, decreasing = T),]
+ESM2DECONS = filter(ESM2NAM, concat == "DE_ESM2_CONS")
+ESM2DECONS <- ESM2DECONS[order(ESM2DECONS$y),]
+wDEESM2 <- wDEESM2[1:nrow(ESM2DECONS),]
+ESM2DECON <- merge(data.frame(wDEESM2, row.names = NULL), data.frame(ESM2DECONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM2 = filter(w, combine == "DE_ESM2_HL1")
+wDEESM2 = wDEESM2[order(wDEESM2$eu5_preblock_gms, decreasing = T),]
+ESM2DEHL1 = filter(ESM2NAM, concat == "DE_ESM2_HL1")
+ESM2DEHL1 <- ESM2DEHL1[order(ESM2DEHL1$y),]
+wDEESM2 <- wDEESM2[1:nrow(ESM2DEHL1),]
+DEESM2HL1 <- merge(data.frame(wDEESM2, row.names = NULL), data.frame(ESM2DEHL1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM2 = filter(w, combine == "DE_ESM2_HL2")
+wDEESM2 = wDEESM2[order(wDEESM2$eu5_preblock_gms, decreasing = T),]
+ESM2DEHL2 = filter(ESM2NAM, concat == "DE_ESM2_HL2")
+ESM2DEHL2 <- ESM2DEHL2[order(ESM2DEHL2$y),]
+wDEESM2 <- wDEESM2[1:nrow(ESM2DEHL2),]
+DEESM2HL2 <- merge(data.frame(wDEESM2, row.names = NULL), data.frame(ESM2DEHL2, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDEESM2 = filter(w, combine == "DE_ESM2_HL3")
+wDEESM2 = wDEESM2[order(wDEESM2$eu5_preblock_gms, decreasing = T),]
+ESM2DEHL3 = filter(ESM2NAM, concat == "DE_ESM2_HL3")
+ESM2DEHL3 <- ESM2DEHL3[order(ESM2DEHL3$y),]
+wDEESM2 <- wDEESM2[1:nrow(ESM2DEHL3),]
+DEESM2HL3 <- merge(data.frame(wDEESM2, row.names = NULL), data.frame(ESM2DEHL3, row.names = NULL), by = 0, all = TRUE)[-1]
+
+##DE TBAM###
+
+wDETBAM = filter(w, combine =='DE_TBAM PAN EU_HL1')
+wDETBAM = wDETBAM[order(wDETBAM$eu5_preblock_gms, decreasing = T),]
+TBAMDEHL1 = filter(TBAMNAM, concat=='DE_TBAM PAN EU_HL1')
+TBAMDEHL1  <- TBAMDEHL1[order(TBAMDEHL1$y),]
+wDETBAM <- wDETBAM[1:nrow(TBAMDEHL1),]
+DETBAMHL1 <- merge(data.frame(wDETBAM, row.names = NULL), data.frame(TBAMDEHL1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDETBAM = filter(w, combine =='DE_TBAM PAN EU_HL2')
+wDETBAM = wDETBAM[order(wDETBAM$eu5_preblock_gms, decreasing = T),]
+TBAMDEHL2 = filter(TBAMNAM, concat=='DE_TBAM PAN EU_HL2')
+TBAMDEHL2  <- TBAMDEHL2[order(TBAMDEHL2$y),]
+wDETBAM <- wDETBAM[1:nrow(TBAMDEHL2),]
+DETBAMHL2 <- merge(data.frame(wDETBAM, row.names = NULL), data.frame(TBAMDEHL2, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDETBAM = filter(w, combine =='DE_TBAM PAN EU_HL3')
+wDETBAM = wDETBAM[order(wDETBAM$eu5_preblock_gms, decreasing = T),]
+TBAMDEHL3 = filter(TBAMNAM, concat=='DE_TBAM PAN EU_HL3')
+TBAMDEHL3  <- TBAMDEHL3[order(TBAMDEHL3$y),]
+wDETBAM <- wDETBAM[1:nrow(TBAMDEHL3),]
+DETBAMHL3 <- merge(data.frame(wDETBAM, row.names = NULL), data.frame(TBAMDEHL3, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+wDETBAM = filter(w, combine =='DE_TBAM PAN EU_SL')
+wDETBAM = wDETBAM[order(wDETBAM$eu5_preblock_gms, decreasing = T),]
+TBAMDESL = filter(TBAMNAM, concat=='DE_TBAM PAN EU_SL')
+TBAMDESL  <- TBAMDESL[order(TBAMDESL$y),]
+wDETBAM <- wDETBAM[1:nrow(TBAMDESL),]
+DETBAMSL <- merge(data.frame(wDETBAM, row.names = NULL), data.frame(TBAMDESL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wDETBAM = filter(w, combine =='DE_TBAM PAN EU_CONS')
+wDETBAM = wDETBAM[order(wDETBAM$eu5_preblock_gms, decreasing = T),]
+TBAMDECONS = filter(TBAMNAM, concat=='DE_TBAM PAN EU_CONS')
+TBAMDECONS  <- TBAMDECONS[order(TBAMDECONS$y),]
+wDETBAM <- wDETBAM[1:nrow(TBAMDECONS),]
+DETBAMCONS <- merge(data.frame(wDETBAM, row.names = NULL), data.frame(TBAMDECONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+##IT ESM1###
+
+wITESM1 = filter(w, combine == "IT_ESM1_SL")
+wITESM1 = wITESM1[order(wITESM1$eu5_preblock_gms, decreasing = T),]
+ESM1ITSL = filter(ESM1NAM, concat == "IT_ESM1_SL")
+ESM1ITSL <- ESM1ITSL[order(ESM1ITSL$y),]
+wITESM1 <- wITESM1[1:nrow(ESM1ITSL),]
+ITSL1 <- merge(data.frame(wITESM1, row.names = NULL), data.frame(ESM1ITSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITESM1 = filter(w, combine == "IT_ESM1_CONS")
+wITESM1 = wITESM1[order(wITESM1$eu5_preblock_gms, decreasing = T),]
+ESM1ITCONS = filter(ESM1NAM, concat == "IT_ESM1_CONS")
+ESM1ITCONS <- ESM1ITCONS[order(ESM1ITCONS$y),]
+wITESM1 <- wITESM1[1:nrow(ESM1ITCONS),]
+ITCONS <- merge(data.frame(wITESM1, row.names = NULL), data.frame(ESM1ITCONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITESM1 = filter(w, combine == "IT_ESM1_OHL")
+wITESM1 = wITESM1[order(wITESM1$eu5_preblock_gms, decreasing = T),]
+ESM1ITOHL = filter(ESM1NAM, concat == "IT_ESM1_OHL")
+ESM1ITOHL <- ESM1ITOHL[order(ESM1ITOHL$y),]
+wITESM1 <- wITESM1[1:nrow(ESM1ITOHL),]
+ITOHL <- merge(data.frame(wITESM1, row.names = NULL), data.frame(ESM1ITOHL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITESM1 = filter(w, combine == "IT_ESM1_CE")
+wITESM1 = wITESM1[order(wITESM1$eu5_preblock_gms, decreasing = T),]
+ESM1ITCE = filter(ESM1NAM, concat == "IT_ESM1_CE")
+ESM1ITCE <- ESM1ITCE[order(ESM1ITCE$y),]
+wITESM1 <- wITESM1[1:nrow(ESM1ITCE),]
+ITCE <- merge(data.frame(wITESM1, row.names = NULL), data.frame(ESM1ITCE, row.names = NULL), by = 0, all = TRUE)[-1]
+
+#ITESM2##
+
+wITESM2 = filter(w, combine == "IT_ESM2_SL")
+wITESM2 = wITESM2[order(wITESM2$eu5_preblock_gms, decreasing = T),]
+ESM2ITSL = filter(ESM2NAM, concat == "IT_ESM2_SL")
+ESM2ITSL <- ESM2ITSL[order(ESM2ITSL$y),]
+wITESM2 <- wITESM2[1:nrow(ESM2ITSL),]
+ITESM2SL <- merge(data.frame(wITESM2, row.names = NULL), data.frame(ESM2ITSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITESM2 = filter(w, combine == "IT_ESM2_CONS")
+wITESM2 = wITESM2[order(wITESM2$eu5_preblock_gms, decreasing = T),]
+ESM2ITCONS = filter(ESM2NAM, concat == "IT_ESM2_CONS")
+ESM2ITCONS <- ESM2ITCONS[order(ESM2ITCONS$y),]
+wITESM2 <- wITESM2[1:nrow(ESM2ITCONS),]
+ITESM2CONS <- merge(data.frame(wITESM2, row.names = NULL), data.frame(ESM2ITCONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITESM2 = filter(w, combine == "IT_ESM2_OHL")
+wITESM2 = wITESM2[order(wITESM2$eu5_preblock_gms, decreasing = T),]
+ESM2ITOHL = filter(ESM2NAM, concat == "IT_ESM2_OHL")
+ESM2ITOHL <- ESM2ITOHL[order(ESM2ITOHL$y),]
+wITESM2 <- wITESM2[1:nrow(ESM2ITOHL),]
+ITESM2OHL <- merge(data.frame(wITESM2, row.names = NULL), data.frame(ESM2ITOHL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITESM2 = filter(w, combine == "IT_ESM2_CE")
+wITESM2 = wITESM2[order(wITESM2$eu5_preblock_gms, decreasing = T),]
+ESM2ITCE = filter(ESM2NAM, concat == "IT_ESM2_CE")
+ESM2ITCE <- ESM2ITCE[order(ESM2ITCE$y),]
+wITESM2 <- wITESM2[1:nrow(ESM2ITCE),]
+ITESM2CE <- merge(data.frame(wITESM2, row.names = NULL), data.frame(ESM2ITCE, row.names = NULL), by = 0, all = TRUE)[-1]
+
+##IT TBAM PAN EU##
+
+wITTBAM = filter(w, combine =='IT_TBAM PAN EU_SL')
+wITTBAM = wITTBAM[order(wITTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMITSL = filter(TBAMNAM, concat=='IT_TBAM PAN EU_SL')
+TBAMITSL  <- TBAMITSL[order(TBAMITSL$y),]
+wITTBAM <- wITTBAM[1:nrow(TBAMITSL),]
+ITTBAMSL <- merge(data.frame(wITTBAM, row.names = NULL), data.frame(TBAMITSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITTBAM = filter(w, combine =='IT_TBAM PAN EU_CONS')
+wITTBAM = wITTBAM[order(wITTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMITCONS = filter(TBAMNAM, concat=='IT_TBAM PAN EU_CONS')
+TBAMITCONS  <- TBAMITCONS[order(TBAMITCONS$y),]
+wITTBAM <- wITTBAM[1:nrow(TBAMITCONS),]
+ITTBAMCONS <- merge(data.frame(wITTBAM, row.names = NULL), data.frame(TBAMITCONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wITTBAM = filter(w, combine =='IT_TBAM PAN EU_CE')
+wITTBAM = wITTBAM[order(wITTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMITCE = filter(TBAMNAM, concat=='IT_TBAM PAN EU_CE')
+TBAMITCE  <- TBAMITCE[order(TBAMITCE$y),]
+wITTBAM <- wITTBAM[1:nrow(TBAMITCE),]
+ITTBAMCE <- merge(data.frame(wITTBAM, row.names = NULL), data.frame(TBAMITCE, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+wITTBAM = filter(w, combine =='IT_TBAM PAN EU_OHL')
+wITTBAM = wITTBAM[order(wITTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMITOHL = filter(TBAMNAM, concat=='IT_TBAM PAN EU_OHL')
+TBAMITOHL  <- TBAMITOHL[order(TBAMITOHL$y),]
+wITTBAM <- wITTBAM[1:nrow(TBAMITOHL),]
+ITTBAMOHL <- merge(data.frame(wITTBAM, row.names = NULL), data.frame(TBAMITOHL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+##UK ESM1##
+
+wUKESM = filter(w, UKPrio == "PHOENIX_HYD")
+wUKESM = wUKESM[order(wUKESM$eu5_preblock_gms, decreasing = T),]
+wUKESM = filter(wUKESM, combine == 'UK_ESM1_HL1')
+ESM1UKHL = filter(ESM1NAM, concat == "UK_ESM1_HL1")
+ESM1UKHL <- ESM1UKHL[order(ESM1UKHL$y),]
+wUKESM <- wUKESM[1:nrow(ESM1UKHL),]
+UKHL1 <- merge(data.frame(wUKESM, row.names = NULL), data.frame(ESM1UKHL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+rm(wUKESM)
+
+wUKESM = filter(w, UKPrio == "PHOENIX_HYD")
+wUKESM = wUKESM[order(wUKESM$eu5_preblock_gms, decreasing = T),]
+wUKESM = filter(wUKESM, combine == 'UK_ESM1_CONS')
+ESM1UKCONS = filter(ESM1NAM, concat == "UK_ESM1_CONS")
+ESM1UKCONS <- ESM1UKCONS[order(ESM1UKCONS$y),]
+wUKESM <- wUKESM[1:nrow(ESM1UKCONS),]
+UKCONS <- merge(data.frame(wUKESM, row.names = NULL), data.frame(ESM1UKCONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+rm(wUKESM)
+
+wUKESM = filter(w, UKPrio == "PHOENIX_HYD")
+wUKESM = wUKESM[order(wUKESM$eu5_preblock_gms, decreasing = T),]
+wUKESM = filter(wUKESM, combine == 'UK_ESM1_SL')
+ESM1UKSL = filter(ESM1NAM, concat == "UK_ESM1_SL")
+ESM1UKSL <- ESM1UKSL[order(ESM1UKSL$y),]
+wUKESM <- wUKESM[1:nrow(ESM1UKSL),]
+UKSL <- merge(data.frame(wUKESM, row.names = NULL), data.frame(ESM1UKSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+rm(wUKESM)
+
+wUKESM = filter(w, combine == 'UK_ESM1_HL1')
+wUKESM = wUKESM[order(wUKESM$eu5_preblock_gms, decreasing = T),]
+ESM1UKHL1 = filter(ESM1NAM, concat == "UK_ESM1_HL1")
+ESM1UKHL1 <- ESM1UKHL1[order(ESM1UKHL1$y),]
+wUKESM <- wUKESM[1:nrow(ESM1UKHL1),]
+UKHL1 <- merge(data.frame(wUKESM, row.names = NULL), data.frame(ESM1UKHL1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wUKESM = filter(w, combine == 'UK_ESM1_CONS')
+wUKESM = wUKESM[order(wUKESM$eu5_preblock_gms, decreasing = T),]
+ESM1UKCONS1 = filter(ESM1NAM, concat == "UK_ESM1_CONS")
+ESM1UKCONS1 <- ESM1UKCONS1[order(ESM1UKCONS1$y),]
+wUKESM <- wUKESM[1:nrow(ESM1UKCONS1),]
+UKCONS1 <- merge(data.frame(wUKESM, row.names = NULL), data.frame(ESM1UKCONS1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wUKESM = filter(w, combine == 'UK_ESM1_SL')
+wUKESM = wUKESM[order(wUKESM$eu5_preblock_gms, decreasing = T),]
+ESM1UKSL = filter(ESM1NAM, concat == "UK_ESM1_SL")
+ESM1UKSL <- ESM1UKSL[order(ESM1UKSL$y),]
+wUKESM <- wUKESM[1:nrow(ESM1UKSL),]
+UKSL1 <- merge(data.frame(wUKESM, row.names = NULL), data.frame(ESM1UKSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+#UKESM2#
+
+wUKESM2 = filter(w, combine == "UK_ESM2_SL")
+wUKESM2 = wUKESM2[order(wUKESM2$eu5_preblock_gms, decreasing = T),]
+ESM2UKSL = filter(ESM2NAM, concat == "UK_ESM2_SL")
+ESM2UKSL <- ESM2UKSL[order(ESM2UKSL$y),]
+wITESM2 <- wITESM2[1:nrow(ESM2UKSL),]
+UKESM2SL <- merge(data.frame(wUKESM2, row.names = NULL), data.frame(ESM2UKSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wUKESM2 = filter(w, combine == "UK_ESM2_CONS")
+wUKESM2 = wUKESM2[order(wUKESM2$eu5_preblock_gms, decreasing = T),]
+ESM2UKCONS = filter(ESM2NAM, concat == "UK_ESM2_CONS")
+ESM2UKCONS <- ESM2UKCONS[order(ESM2UKCONS$y),]
+wUKESM2 <- wUKESM2[1:nrow(ESM2UKCONS),]
+UKESM2CONS <- merge(data.frame(wUKESM2, row.names = NULL), data.frame(ESM2UKCONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wUKESM2 = filter(w, combine == "UK_ESM2_HL1")
+wUKESM2 = wUKESM2[order(wUKESM2$eu5_preblock_gms, decreasing = T),]
+ESM2UKHL1 = filter(ESM2NAM, concat == "UK_ESM2_HL1")
+ESM2UKHL1 <- ESM2UKHL1[order(ESM2UKHL1$y),]
+wUKESM2 <- wUKESM2[1:nrow(ESM2UKHL1),]
+UKESM2HL1 <- merge(data.frame(wUKESM2, row.names = NULL), data.frame(ESM2UKHL1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+#UKTBAM#
+
+wUKTBAM = filter(w, combine =='UK_TBAM PAN EU_CONS')
+wUKTBAM = wUKTBAM[order(wUKTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMUKCONS = filter(TBAMNAM, concat=='UK_TBAM PAN EU_CONS')
+TBAMUKCONS  <- TBAMUKCONS[order(TBAMUKCONS$y),]
+wUKTBAM <- wUKTBAM[1:nrow(TBAMUKCONS),]
+UKTBAMCONS <- merge(data.frame(wUKTBAM, row.names = NULL), data.frame(TBAMUKCONS, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wUKTBAM = filter(w, combine =='UK_TBAM PAN EU_HL1')
+wUKTBAM = wUKTBAM[order(wUKTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMUKHL1 = filter(TBAMNAM, concat=='UK_TBAM PAN EU_HL1')
+TBAMUKHL1  <- TBAMUKHL1[order(TBAMUKHL1$y),]
+wUKTBAM <- wUKTBAM[1:nrow(TBAMUKHL1),]
+UKTBAMHL1 <- merge(data.frame(wUKTBAM, row.names = NULL), data.frame(TBAMUKHL1, row.names = NULL), by = 0, all = TRUE)[-1]
+
+wUKTBAM = filter(w, combine =='UK_TBAM PAN EU_SL')
+wUKTBAM = wUKTBAM[order(wUKTBAM$eu5_preblock_gms, decreasing = T),]
+TBAMUKSL = filter(TBAMNAM, concat=='UK_TBAM PAN EU_SL')
+TBAMUKSL  <- TBAMUKSL[order(TBAMUKSL$y),]
+wUKTBAM <- wUKTBAM[1:nrow(TBAMUKSL),]
+UKTBAMSL <- merge(data.frame(wUKTBAM, row.names = NULL), data.frame(TBAMUKSL, row.names = NULL), by = 0, all = TRUE)[-1]
+
+
+dummy_opp = rbindlist(list(FRSL1,UKHL1,UKCONS,UKSL,UKCONS1,UKSL1,UKESM2SL,UKESM2CONS,UKESM2HL1,UKTBAMCONS,UKTBAMHL1,UKTBAMSL,FRCON,FRHL1,FRHL2,FRESM2ALL,FRTBAMALL,ESSL1,ESOHL,ESCONS,ESHL,ESESM2ALL,ESTBAM,ITLUX,DELUX,UKLUX,FRLUX,ESLUX,DESL1,DECONS,DEHL1,DEHL2,DEHL3,ESM2DESL1,ESM2DECON,DEESM2HL1,DEESM2HL2,DEESM2HL3,DETBAMHL1,DETBAMHL2,DETBAMHL3,DETBAMSL,DETBAMCONS,ITSL1,ITCONS,ITOHL,ITCE,ITESM2SL,ITESM2CONS,ITESM2OHL,ITESM2CE,ITTBAMSL,ITTBAMCONS,ITTBAMCE,ITTBAMOHL))
+
+dummy_opp = filter(dummy_opp, NAM != "")
+
+dummy_opp = filter(dummy_opp, merchant_customer_id != "")
+
+names(dummy_opp)[names(dummy_opp) == "Locale.y"] <- "Locale"
+
+LUX_IT = filter(dummy_opp, Locale =='IT-LUX')
+LUX_UK = filter(dummy_opp, Locale =='UK-LUX')
+LUX_DE = filter(dummy_opp, Locale =='DE-LUX')
+LUX_FR = filter(dummy_opp, Locale =='FR-LUX')
+LUX_ES = filter(dummy_opp, Locale =='ES-LUX')
+UK = filter(dummy_opp, Locale =='UK')
+DE = filter(dummy_opp, Locale =='DE')
+IT = filter(dummy_opp, Locale =='IT')
+ES = filter(dummy_opp, Locale =='ES')
+FR = filter(dummy_opp, Locale =='FR')
+
+LUXtempUK = LUX_UK[,c("merchant_customer_id","UK_Marketplace","UK_Block_gms","UK_Lead_source_detail","NAM")]
+LUXtempDE = LUX_DE[,c("merchant_customer_id","DE_Marketplace","DE_Block_gms","DE_Lead_source_detail","NAM")]
+LUXtempIT = LUX_IT[,c("merchant_customer_id","IT_Marketplace","IT_Block_gms","IT_Lead_source_detail","NAM")]
+LUXtempES = LUX_ES[,c("merchant_customer_id","ES_Marketplace","ES_Block_gms","ES_Lead_source_detail","NAM")]
+LUXtempFR = LUX_FR[,c("merchant_customer_id","FR_Marketplace","FR_Block_gms","FR_Lead_source_detail","NAM")]
+
+LUXfinal = rbindlist(list(LUXtempUK,LUXtempDE,LUXtempIT,LUXtempES,LUXtempFR))
+
+UKtemp = UK[UK$Locale == "UK",]
+UKtemp1 = UK[UK$UK_Marketplace == "UK",]
+UKtemp2 = UK[UK$DE_Marketplace == "DE",]
+UKtemp3 = UK[UK$FR_Marketplace == "FR",]
+UKtemp4 = UK[UK$IT_Marketplace == "IT",]
+UKtemp5 = UK[UK$ES_Marketplace == "ES",]
+
+UKtemp1 = UKtemp1[,c("merchant_customer_id","UK_Marketplace","UK_Block_gms","UK_Lead_source_detail","NAM")]
+UKtemp2 = UKtemp2[,c("merchant_customer_id","DE_Marketplace","DE_Block_gms","DE_Lead_source_detail","NAM")]
+UKtemp4 = UKtemp4[,c("merchant_customer_id","IT_Marketplace","IT_Block_gms","IT_Lead_source_detail","NAM")]
+UKtemp5 = UKtemp5[,c("merchant_customer_id","ES_Marketplace","ES_Block_gms","ES_Lead_source_detail","NAM")]
+UKtemp3 = UKtemp3[,c("merchant_customer_id","FR_Marketplace","FR_Block_gms","FR_Lead_source_detail","NAM")]
+
+UKfinal = rbindlist(list(UKtemp1,UKtemp2,UKtemp3,UKtemp4,UKtemp5))
+
+
+DEtemp1 = DE[DE$UK_Marketplace == "UK",]
+DEtemp2 = DE[DE$DE_Marketplace == "DE",]
+DEtemp3 = DE[DE$FR_Marketplace == "FR",]
+DEtemp4 = DE[DE$IT_Marketplace == "IT",]
+DEtemp5 = DE[DE$ES_Marketplace == "ES",]
+
+DEtemp1 = DEtemp1[,c("merchant_customer_id","UK_Marketplace","UK_Block_gms","UK_Lead_source_detail","NAM")]
+DEtemp2 = DEtemp2[,c("merchant_customer_id","DE_Marketplace","DE_Block_gms","DE_Lead_source_detail","NAM")]
+DEtemp4 = DEtemp4[,c("merchant_customer_id","IT_Marketplace","IT_Block_gms","IT_Lead_source_detail","NAM")]
+DEtemp5 = DEtemp5[,c("merchant_customer_id","ES_Marketplace","ES_Block_gms","ES_Lead_source_detail","NAM")]
+DEtemp3 = DEtemp3[,c("merchant_customer_id","FR_Marketplace","FR_Block_gms","FR_Lead_source_detail","NAM")]
+
+DEfinal = rbindlist(list(DEtemp1,DEtemp2,DEtemp3,DEtemp4,DEtemp5))
+
+
+FRtemp1 = FR[FR$UK_Marketplace == "UK",]
+FRtemp2 = FR[FR$DE_Marketplace == "DE",]
+FRtemp3 = FR[FR$FR_Marketplace == "FR",]
+FRtemp4 = FR[FR$IT_Marketplace == "IT",]
+FRtemp5 = FR[FR$ES_Marketplace == "ES",]
+
+FRtemp1 = FRtemp1[,c("merchant_customer_id","UK_Marketplace","UK_Block_gms","UK_Lead_source_detail","NAM")]
+FRtemp2 = FRtemp2[,c("merchant_customer_id","DE_Marketplace","DE_Block_gms","DE_Lead_source_detail","NAM")]
+FRtemp4 = FRtemp4[,c("merchant_customer_id","IT_Marketplace","IT_Block_gms","IT_Lead_source_detail","NAM")]
+FRtemp5 = FRtemp5[,c("merchant_customer_id","ES_Marketplace","ES_Block_gms","ES_Lead_source_detail","NAM")]
+FRtemp3 = FRtemp3[,c("merchant_customer_id","FR_Marketplace","FR_Block_gms","FR_Lead_source_detail","NAM")]
+
+FRfinal = rbindlist(list(FRtemp1,FRtemp2,FRtemp3,FRtemp4,FRtemp5))
+
+
+ITtemp1 = IT[IT$UK_Marketplace == "UK",]
+ITtemp2 = IT[IT$DE_Marketplace == "DE",]
+ITtemp3 = IT[IT$FR_Marketplace == "FR",]
+ITtemp4 = IT[IT$IT_Marketplace == "IT",]
+ITtemp5 = IT[IT$ES_Marketplace == "ES",]
+
+ITtemp1 = ITtemp1[,c("merchant_customer_id","UK_Marketplace","UK_Block_gms","UK_Lead_source_detail","NAM")]
+ITtemp2 = ITtemp2[,c("merchant_customer_id","DE_Marketplace","DE_Block_gms","DE_Lead_source_detail","NAM")]
+ITtemp4 = ITtemp4[,c("merchant_customer_id","IT_Marketplace","IT_Block_gms","IT_Lead_source_detail","NAM")]
+ITtemp5 = ITtemp5[,c("merchant_customer_id","ES_Marketplace","ES_Block_gms","ES_Lead_source_detail","NAM")]
+ITtemp3 = ITtemp3[,c("merchant_customer_id","FR_Marketplace","FR_Block_gms","FR_Lead_source_detail","NAM")]
+
+ITfinal = rbindlist(list(ITtemp1,ITtemp2,ITtemp3,ITtemp4,ITtemp5))
+
+EStemp1 = ES[ES$UK_Marketplace == "UK",]
+EStemp2 = ES[ES$DE_Marketplace == "DE",]
+EStemp3 = ES[ES$FR_Marketplace == "FR",]
+EStemp4 = ES[ES$IT_Marketplace == "IT",]
+EStemp5 = ES[ES$ES_Marketplace == "ES",]
+
+EStemp1 = EStemp1[,c("merchant_customer_id","UK_Marketplace","UK_Block_gms","UK_Lead_source_detail","NAM")]
+EStemp2 = EStemp2[,c("merchant_customer_id","DE_Marketplace","DE_Block_gms","DE_Lead_source_detail","NAM")]
+EStemp4 = EStemp4[,c("merchant_customer_id","IT_Marketplace","IT_Block_gms","IT_Lead_source_detail","NAM")]
+EStemp5 = EStemp5[,c("merchant_customer_id","ES_Marketplace","ES_Block_gms","ES_Lead_source_detail","NAM")]
+EStemp3 = EStemp3[,c("merchant_customer_id","FR_Marketplace","FR_Block_gms","FR_Lead_source_detail","NAM")]
+
+ESfinal = rbindlist(list(EStemp1,EStemp2,EStemp3,EStemp4,EStemp5))
+
+tempProduct = rbindlist(list(LUXfinal,UKfinal,DEfinal,ITfinal,ESfinal,FRfinal), use.names = TRUE)
+
+tempProduct = cbind(Goal = "Unblock", Product = "SOA", Stage = "Business Definition", Opportunity_id = "", Suggested_by = "",tempProduct)
+OP = tempProduct
+OP = merge(tempProduct, w[,c("Scope","Locale","merchant_customer_id")], by = "merchant_customer_id")
+OP$Suggested_by = paste("HYD_PREBLOCK_GMS_",OP$Scope)
+
+#renaming the columns 
+names(OP)[names(OP) == "merchant_customer_id"] <- "CustomerID"
+names(OP)[names(OP) == "UK_Marketplace"] <- "Marketplace"
+names(OP)[names(OP) == "UK_Block_gms"] <- "GMS_Potential"
+names(OP)[names(OP) == "UK_Lead_source_detail"] <- "Lead_source_detail"
+
+#ESM1 FBA product creation
+esm1 = OP
+esm1 = esm1[,c("CustomerID","Scope","NAM")]
+esm1 = unique(esm1)
+esm1 = cbind(Goal = "Launch", Product = "",Stage = "Business Definition", Opportunity_id = "", Suggested_by = "HYD_PREBLOCK_GMS_ESM1", GMS_Potential = "",Lead_source_detail = "",esm1)
+esm1$Product = ifelse(esm1$Scope == "ESM1","FBA",esm1$Product)
+
+esm1 = subset(esm1,esm1$Product == "FBA")
+
+esm1fr = esm1
+esm1fr$Marketplace = paste("FR")
+
+esm1uk = esm1
+esm1uk$Marketplace = paste("UK")
+
+esm1de = esm1
+esm1de$Marketplace = paste("DE")
+
+esm1es = esm1
+esm1es$Marketplace = paste("ES")
+
+esm1it = esm1
+esm1it$Marketplace = paste("IT")
+
+esmFBA = rbindlist(list(esm1uk,esm1de,esm1fr,esm1it,esm1es))
+
+
+esm1.1 = OP
+esm1.1 = esm1.1[,c("CustomerID","Scope","NAM")]
+esm1.1 = unique(esm1.1)
+esm1.1 = cbind(Goal = "Launch", Product = "",Stage = "Business Definition", Opportunity_id = "",Suggested_by = "HYD_PREBLOCK_GMS_ESM1",GMS_Potential = "",Lead_source_detail = "",esm1.1)
+esm1.1$Product = ifelse(esm1.1$Scope == "ESM1","FBA - PAN EU",esm1.1$Product)
+
+esm1.1 = subset(esm1.1,esm1.1$Product == "FBA - PAN EU")
+
+esm1.1fr = esm1.1
+esm1.1fr$Marketplace = paste("FR")
+
+esm1.1uk = esm1.1
+esm1.1uk$Marketplace = paste("UK")
+
+esm1.1de = esm1.1
+esm1.1de$Marketplace = paste("DE")
+
+esm1.1es = esm1.1
+esm1.1es$Marketplace = paste("ES")
+
+esm1.1it = esm1.1
+esm1.1it$Marketplace = paste("IT")
+
+esm1.1FBA = rbindlist(list(esm1.1uk,esm1.1de,esm1.1fr,esm1.1it,esm1.1es))
+
+
+esm2 = OP
+esm2 = esm2[,c("CustomerID","Scope","NAM")]
+esm2 = unique(esm2)
+esm2 = cbind(Goal = "Launch", Product = "",Stage = "Business Definition", Opportunity_id = "", Suggested_by = "HYD_PREBLOCK_GMS_ESM2" ,GMS_Potential = "",Lead_source_detail = "",esm2)
+esm2$Product = ifelse(esm2$Scope == "ESM2","FBA - PAN EU",esm2$Product)
+
+esm2 = subset(esm2,esm2$Product == "FBA - PAN EU")
+
+esm2fr = esm2
+esm2fr$Marketplace = paste("FR")
+
+esm2uk = esm2
+esm2uk$Marketplace = paste("UK")
+
+esm2de = esm2
+esm2de$Marketplace = paste("DE")
+
+esm2es = esm2
+esm2es$Marketplace = paste("ES")
+
+esm2it = esm2
+esm2it$Marketplace = paste("IT")
+
+esm2FBAPANEU = rbindlist(list(esm2uk,esm2de,esm2fr,esm2it,esm2es))
+
+FBAesm1 = rbindlist(list(esmFBA,esm1.1FBA,esm2FBAPANEU))
+
+
+Opp_product = rbindlist(list(OP,FBAesm1), fill = TRUE)
+
+#Opportunity template creation#
+names(dummy_opp)[names(dummy_opp) == "merchant_pg_group_description"] = "Primary Category"
+names(dummy_opp)[names(dummy_opp) == "merchant_customer_id"] = "CID"
+names(dummy_opp)[names(dummy_opp) == "eu5_preblock_gms"] = "GMS_Potential"
+names(dummy_opp)[names(dummy_opp) == "Scope.x"] = "seg_scope"
+dummy_opp = dummy_opp[,c("CID","NAM","Primary Category","GMS_Potential","account_id","contactid","seg_scope","PF","Locale")]
+dummy_opp$GMS = round(dummy_opp$GMS)
+dummy_opp = cbind(Stage = "New", Type = "Direct", Recordtypeid = "012360000011uuwAAA", Closedate = "12/31/2018", Description = "",dummy_opp)
+dummy_opp$Description = paste("EU_PREBLOCK GMS : $",dummy_opp$GMS)
+Opportunity_temp <- merge(dummy_opp,NAMcheck [,c("OwnerID", "NAM","NAM_Scope","NAM_PF")], by.x = "NAM" , by.y = "NAM")
+
+#opportunity lead source detail
+LSD = Opp_product
+LSD = LSD[,c("CustomerID","Goal","Product","Marketplace")]
+LSD$remove = ""
+LSD$remove = ifelse(LSD$Product != "SOA","Remove",LSD$remove)
+LSD = subset(LSD,LSD$remove != "Remove")
+LSD$remove = paste("|",LSD$Product,"_BLOCK-",LSD$Marketplace,"|")
+
+LSDtemp1 = LSD[LSD$Marketplace == "UK",]
+names(LSDtemp1)[names(LSDtemp1) == 'remove'] <- 'remove1'
+LSDtemp1 = LSDtemp1[,c("CustomerID","remove1")]
+LSDtemp2 = LSD[LSD$Marketplace == "DE",]
+names(LSDtemp2)[names(LSDtemp2) == 'remove'] <- 'remove2'
+LSDtemp2 = LSDtemp2[,c("CustomerID","remove2")]
+LSDtemp3 = LSD[LSD$Marketplace == "FR",]
+names(LSDtemp3)[names(LSDtemp3) == 'remove'] <- 'remove3'
+LSDtemp3 = LSDtemp3[,c("CustomerID","remove3")]
+LSDtemp4 = LSD[LSD$Marketplace == "IT",]
+names(LSDtemp4)[names(LSDtemp4) == 'remove'] <- 'remove4'
+LSDtemp4 = LSDtemp4[,c("CustomerID","remove4")]
+LSDtemp5 = LSD[LSD$Marketplace == "ES",]
+names(LSDtemp5)[names(LSDtemp5) == 'remove'] <- 'remove5'
+LSDtemp5 = LSDtemp5[,c("CustomerID","remove5")]
+
+
+Leadsource = LSD
+Leadsource = Leadsource[,c("CustomerID")]
+Leadsource = unique(Leadsource)
+leadtemp <- merge(Leadsource,LSDtemp1 [,c("remove1", "CustomerID")], by.x = "CustomerID" , by.y = "CustomerID", all.x = T)
+leadtemp <- merge(leadtemp,LSDtemp2, by = c("CustomerID"), all.x = T)
+leadtemp <- merge(leadtemp,LSDtemp3, by = c("CustomerID"), all.x = T)
+leadtemp <- merge(leadtemp,LSDtemp4, by = c("CustomerID"), all.x = T)
+leadtemp <- merge(leadtemp,LSDtemp5, by = c("CustomerID"), all.x = T)
+
+leadtemp$lead_source_detail = paste("HYD_SOA_UNBLOCK~|",leadtemp$remove1,leadtemp$remove2,leadtemp$remove3,leadtemp$remove4,leadtemp$remove5)
+
+leadtemp$lead_source_detail = gsub("NA","",leadtemp$lead_source_detail)
+leadtemp$lead_source_detail = gsub(" ","",leadtemp$lead_source_detail)
+leadtemp$lead_source_detail = gsub("||","|",leadtemp$lead_source_detail, fixed=TRUE)
+leadtemp$lead_source_detail= gsub("||","|",leadtemp$lead_source_detail, fixed=TRUE)
+leadtemp$lead_source_detail = gsub("||","|",leadtemp$lead_source_detail, fixed=TRUE)
+leadtemp$lead_source_detail = gsub("||","|",leadtemp$lead_source_detail, fixed=TRUE)
+
+LSDtemplate = leadtemp #For reference purpose
+
+leadtemp = leadtemp[,c("CustomerID","lead_source_detail")]
+names(leadtemp)[names(leadtemp) == 'CustomerID'] <- 'CID'
+Opportunity_temp <- merge(leadtemp,Opportunity_temp, by = c("CID"), all.x = T)
+
+write.csv(Opportunity_temp, file=choose.files(caption="Save AS...",filters = c("Comma Delimited Files (.csv)","*.csv")),row.names = FALSE)
+
+write.csv(Opp_product, file=choose.files(caption="Save AS...",filters = c("Comma Delimited Files (.csv)","*.csv")),row.names = FALSE)
